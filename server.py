@@ -77,7 +77,7 @@ def get_schedule():
         teachers_data = item.get('teachers', {})
         teacher_names = [info.get('fio') for info in (teachers_data.values() if isinstance(teachers_data, dict) else []) if info.get('fio')]
         
-        description = f"Преподаватель: {', '.join(teacher_names) if teacher_names else 'Не указан'}"
+        description = f"{', '.join(teacher_names) if teacher_names else 'Преподаватель не указан'}"
         
         # Обработка ссылки и локации
         online_url = item.get('urlOnline')
