@@ -75,7 +75,7 @@ def get_schedule():
         event.add('dtend', end_dt)
         
         teachers_data = item.get('teachers', {})
-        teacher_names = [info.get('fio') for info in (teachers_data.values() if isinstance(teachers_data, dict) else []) if info.get('fio')]
+        teacher_names = [info.get('fio') for info in (teachers_data.values() if isinstance(teachers_data, dict) else []) if isinstance(info, dict) and info.get('fio')]
         
         description = f"{', '.join(teacher_names) if teacher_names else 'Преподаватель не указан'}"
         
