@@ -1,3 +1,4 @@
+import os
 import uuid
 import pytz
 import re
@@ -10,6 +11,9 @@ from fastapi.responses import Response
 
 app = FastAPI()
 
+# Получаем группу из настроек сервера. Если не указана, по умолчанию К0609-24
+TARGET_GROUP = os.getenv("TARGET_GROUP", "К0609-24")
+
 def format_location(item):
     classroom = item.get('classroom')
     place = item.get('place')
@@ -18,13 +22,8 @@ def format_location(item):
     if not raw_loc:
         return "Место не указано"
 
-    # 1. Убираем дублирование
     clean_loc = re.sub(r'(.{5,}?)\1', r'\1', raw_loc)
-
-    # 2. Убираем технический мусор (-1К_20 -> К_20)
     clean_loc = re.sub(r'^[-\d\.\,\s]+', '', clean_loc).strip()
-
-    # 3. Убираем префикс "К_", если дальше не цифра (К_Росатом -> Росатом)
     clean_loc = re.sub(r'^К_(?![0-9])', '', clean_loc).strip()
 
     return clean_loc
@@ -42,17 +41,18 @@ def get_schedule():
     c = Pyrinium()
     c.get_initial_data()
     
-    raw_current = c.get_schedule("К0609-24")
+    # Используем переменную TARGET_GROUP
+    raw_current = c.get_schedule(TARGET_GROUP)
     events_current = parse_schedule(raw_current)
     
     c.change_week(1)
-    raw_next = c.get_schedule("К0609-24")
+    raw_next = c.get_schedule(TARGET_GROUP)
     events_next = parse_schedule(raw_next)
 
     all_events = events_current + events_next
     
     cal = Calendar()
-    cal.add('prodid', '-//Pyrinium Schedule Parser//')
+    cal.add('prodid', f'-//Pyrinium Schedule Parser ({TARGET_GROUP})//')
     cal.add('version', '2.0')
     tz = pytz.timezone('Europe/Moscow')
 
@@ -79,12 +79,11 @@ def get_schedule():
         
         description = f"{', '.join(teacher_names) if teacher_names else 'Преподаватель не указан'}"
         
-        # Обработка ссылки и локации
         online_url = item.get('urlOnline')
         location_info = format_location(item)
 
         if online_url:
-            event.add('url', online_url) # Кнопка "Open" в iOS
+            event.add('url', online_url)
             final_location = f"URL / {location_info}"
         else:
             final_location = location_info
