@@ -37,16 +37,16 @@ OOMScoreAdjust=-500
 WantedBy=multi-user.target
 EOF
 
-echo "=== Создание службы для К0709-25/1 (Порт 8001) ==="
+echo "=== Создание службы для К0409-25/1 (Порт 8001) ==="
 cat << EOF > /etc/systemd/system/schedule-parser-8001.service
 [Unit]
-Description=FastAPI Schedule Parser (Group K0709-25/1)
+Description=FastAPI Schedule Parser (Group K0409-25/1)
 After=network.target
 
 [Service]
 User=root
 WorkingDirectory=$WORK_DIR
-Environment="TARGET_GROUP=К0709-25/1"
+Environment="TARGET_GROUP=К0409-25/1"
 ExecStart=$WORK_DIR/.venv/bin/python3 -m uvicorn server:app --host 0.0.0.0 --port 8001
 Restart=always
 RestartSec=5
@@ -65,4 +65,4 @@ systemctl restart schedule-parser-8001.service
 
 echo "=== Готово! ==="
 echo "Порт 8000: Расписание К0609-24"
-echo "Порт 8001: Расписание К0709-25/1"
+echo "Порт 8001: Расписание К0409-25/1"
