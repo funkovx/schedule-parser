@@ -2,6 +2,10 @@
 
 Serves the class schedule of any Sirius College group as an iCalendar feed, so you can subscribe to it in Apple Calendar, Google Calendar or any other calendar app and always see up-to-date classes.
 
+![Schedule in Apple Calendar](docs/calendar-week.png)
+
+<sub>The feed subscribed in Apple Calendar on macOS: one week of classes with rooms and times.</sub>
+
 ## Usage
 
 Subscribe to:
