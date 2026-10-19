@@ -1,24 +1,36 @@
 # Schedule Parser
 
-Отдаёт расписание групп колледжа Сириус в формате iCalendar, чтобы подписаться на него в Календаре.
+Serves the class schedule of any Sirius College group as an iCalendar feed, so you can subscribe to it in Apple Calendar, Google Calendar or any other calendar app and always see up-to-date classes.
 
-## Ссылки
+## Usage
 
-- `https://funkov.space:8443/schedule.ics?group=K0609-24` — любая группа через `group` (букву К можно писать и латиницей, и кириллицей)
-- `&skip_pa=0` — не убирать ППА/ПА (по умолчанию убираются)
-- `&alarm=5` — напоминание за 5 минут вместо 10, `&alarm=0` — без напоминаний
+Subscribe to:
 
-В календаре: текущая неделя и две следующие. Если на них ещё нет расписания, они пустые.
+```
+https://funkov.space:8443/schedule.ics?group=K0609-24
+```
 
-## Как устроено
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `group` | `K0609-24` | Group code. The letter can be typed in Latin or Cyrillic. |
+| `skip_pa` | `1` | Assessment events (ПА/ППА) are hidden by default. Set `0` to keep them. |
+| `alarm` | `10` | Reminder lead time in minutes. `0` disables reminders. |
 
-- `server.py` (FastAPI) слушает только `127.0.0.1:8090` от пользователя `schedule` с ограничениями systemd.
-- nginx принимает HTTPS на 8443 (Let's Encrypt), ограничивает частоту запросов и пропускает только `GET /schedule.ics`.
-- Расписание кэшируется на 15 минут в `/var/lib/schedule-parser`. Если сайт расписания недоступен, отдаётся последняя удачная версия (до 7 дней), а не пустой календарь.
-- UID событий постоянные, поэтому календарь не пересоздаёт пары при каждом обновлении.
+The feed contains the current week and the next two. Weeks without a published schedule are empty.
 
-## Установка
+## How it works
+
+- `server.py` (FastAPI) listens only on `127.0.0.1:8090`, runs as a dedicated `schedule` user and is sandboxed with systemd hardening.
+- nginx terminates HTTPS on port 8443 (Let's Encrypt), rate-limits clients and only allows `GET /schedule.ics`.
+- Responses are cached for 15 minutes in `/var/lib/schedule-parser`. If the source site is down, the last good copy (up to 7 days old) is served instead of an empty calendar, which would wipe everyone's classes.
+- Event UIDs are stable, so calendar apps update existing events instead of recreating them on every refresh.
+
+## Self-hosting
+
+On a Debian/Ubuntu server, as root:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/qfunky/schedule-parser/main/setup.sh | bash
 ```
+
+The installer creates the service user, installs the systemd unit and the nginx config, and requests a certificate. See `deploy/` for the individual pieces.

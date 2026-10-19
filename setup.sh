@@ -1,5 +1,5 @@
 #!/bin/bash
-# Быстрая установка: скачивает репозиторий и запускает deploy/install.sh
+# Quick install: downloads the repo and runs deploy/install.sh
 set -euo pipefail
 apt-get update && apt-get install -y git curl python3-venv nginx certbot
 rm -rf /tmp/schedule-parser

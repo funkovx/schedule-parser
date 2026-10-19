@@ -17,14 +17,14 @@ from pyrinium import Pyrinium
 
 log = logging.getLogger("schedule-parser")
 
-# Документация FastAPI (/docs, /openapi.json) наружу не нужна
+# FastAPI docs (/docs, /openapi.json) are not exposed publicly
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.middleware("http")
 async def raw_query_from_nginx(request, call_next):
-    # uvicorn отклоняет адреса с кириллицей без %-кодирования (?group=К0609-24),
-    # поэтому nginx передаёт строку запроса в заголовке X-Query, а здесь она кодируется
+    # uvicorn rejects URLs with raw Cyrillic that is not %-encoded (?group=К0609-24),
+    # so nginx passes the query string in the X-Query header and it is encoded here
     raw = next((v for k, v in request.scope["headers"] if k == b"x-query"), None)
     if raw is not None:
         request.scope["query_string"] = quote_from_bytes(raw, safe="=&%+/").encode()
@@ -32,20 +32,20 @@ async def raw_query_from_nginx(request, call_next):
 
 TZ = ZoneInfo("Europe/Moscow")
 DEFAULT_GROUP = os.getenv("TARGET_GROUP", "К0609-24")
-# Текущая неделя + столько недель вперёд. Если расписания ещё нет, недели просто пустые
+# Current week plus this many weeks ahead. Weeks without a published schedule stay empty
 WEEKS_AHEAD = int(os.getenv("WEEKS_AHEAD", "2"))
-# Как долго отдаём расписание из кэша, не обращаясь к сайту
+# How long to serve the schedule from cache without hitting the source site
 CACHE_TTL = int(os.getenv("CACHE_TTL", "900"))
-# Если сайт недоступен, отдаём последнее удачное расписание не старше этого срока
+# If the site is down, serve the last good schedule as long as it is newer than this
 STALE_MAX_AGE = int(os.getenv("STALE_MAX_AGE", str(7 * 24 * 3600)))
-# За сколько минут до пары напоминать. 0 — без напоминаний
+# Reminder lead time in minutes before a class. 0 disables reminders
 ALARM_MINUTES = int(os.getenv("ALARM_MINUTES", "10"))
 STATE_DIR = Path(os.getenv("STATE_DIRECTORY", "/var/lib/schedule-parser"))
 
 GROUP_RE = re.compile(r"^[А-ЯЁ]{1,3}\d{3,4}-\d{2}(/\d{1,2})?$")
-# Латинские буквы, похожие на кириллические: K0609-24 и К0609-24 — одна группа
+# Latin letters that look like Cyrillic ones: K0609-24 and К0609-24 are the same group
 LATIN_TO_CYRILLIC = str.maketrans("ABCEHKMOPTXY", "АВСЕНКМОРТХУ")
-# ПА / ППА / ППА1 / ПА-2 / (ПА) как отдельное слово, а также «промежуточная аттестация»
+# Assessment events (ПА / ППА / ППА1 / ПА-2 / (ПА) as a separate word, or the full phrase)
 PA_RE = re.compile(
     r"(?<![А-Яа-яЁёA-Za-z])П?ПА(?:\s*-?\s*\d+)?(?![А-Яа-яЁёA-Za-z])|промежуточн\w*\s+аттестац",
     re.IGNORECASE,
@@ -114,7 +114,7 @@ def get_events(group):
     with _locks_guard:
         lock = _locks.setdefault(group, threading.Lock())
 
-    # Один запрос к сайту на группу одновременно, остальные ждут его результат
+    # One in-flight request to the site per group; concurrent callers wait for its result
     with lock:
         cached = _cache.get(group) or _load_state(group)
         if cached and time.time() - cached[0] < CACHE_TTL:
@@ -124,7 +124,7 @@ def get_events(group):
             events = fetch_events(group)
         except Exception:
             log.exception("fetch failed for %s", group)
-            # Пустой календарь стёр бы у подписчиков все пары, поэтому отдаём старый или 503
+            # An empty calendar would wipe every class for subscribers, so serve the stale copy or a 503
             if cached and time.time() - cached[0] < STALE_MAX_AGE:
                 return cached[1]
             raise HTTPException(status_code=503, detail="Расписание временно недоступно")
@@ -136,8 +136,8 @@ def get_events(group):
 
 
 def make_uid(group, item):
-    # Один и тот же UID при каждом обновлении, чтобы календарь не пересоздавал события
-    # Преподаватели в ключе различают подгруппы, у которых одна пара в одно время
+    # Stable UIDs across refreshes so calendar apps don't recreate events
+    # Teachers are part of the key to tell apart subgroups that share a time slot
     teachers = item.get("teachers")
     key = "|".join(
         [str(item.get(k) or "") for k in ("date", "startTime", "endTime", "discipline", "groupType", "numberPair")]
