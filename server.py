@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
-from icalendar import Calendar, Event, vText
+from icalendar import Alarm, Calendar, Event, vText
 from pyrinium import Pyrinium
 
 log = logging.getLogger("schedule-parser")
@@ -27,6 +27,8 @@ WEEKS_AHEAD = int(os.getenv("WEEKS_AHEAD", "2"))
 CACHE_TTL = int(os.getenv("CACHE_TTL", "900"))
 # Если сайт недоступен, отдаём последнее удачное расписание не старше этого срока
 STALE_MAX_AGE = int(os.getenv("STALE_MAX_AGE", str(7 * 24 * 3600)))
+# За сколько минут до пары напоминать. 0 — без напоминаний
+ALARM_MINUTES = int(os.getenv("ALARM_MINUTES", "10"))
 STATE_DIR = Path(os.getenv("STATE_DIRECTORY", "/var/lib/schedule-parser"))
 
 GROUP_RE = re.compile(r"^[А-ЯЁA-Z]{1,3}\d{3,4}-\d{2}(/\d{1,2})?$")
@@ -131,7 +133,7 @@ def make_uid(group, item):
     return f"{hashlib.sha1(f'{group}|{key}'.encode()).hexdigest()}@funkov.space"
 
 
-def build_calendar(group, events, skip_pa):
+def build_calendar(group, events, skip_pa, alarm_minutes):
     cal = Calendar()
     cal.add("prodid", f"-//Schedule Parser ({group})//")
     cal.add("version", "2.0")
@@ -187,6 +189,14 @@ def build_calendar(group, events, skip_pa):
 
         event.add("description", description)
         event.add("location", vText(location_info))
+        if alarm_minutes:
+            alarm = Alarm()
+            alarm.add("uid", f"alarm-{uid}")
+            alarm.add("action", "DISPLAY")
+            alarm.add("description", event["summary"])
+            alarm.add("trigger", timedelta(minutes=-alarm_minutes))
+            event.add_component(alarm)
+
         cal.add_component(event)
 
     cal.add_missing_timezones()
@@ -197,6 +207,7 @@ def build_calendar(group, events, skip_pa):
 def get_schedule(
     group: str = Query(DEFAULT_GROUP, max_length=20),
     skip_pa: bool = Query(True),
+    alarm: int = Query(ALARM_MINUTES, ge=0, le=1440),
 ):
     group = group.strip().upper()
     if not GROUP_RE.match(group):
@@ -204,7 +215,7 @@ def get_schedule(
 
     events = get_events(group)
     return Response(
-        content=build_calendar(group, events, skip_pa),
+        content=build_calendar(group, events, skip_pa, alarm),
         media_type="text/calendar; charset=utf-8",
         headers={"Cache-Control": "public, max-age=300"},
     )
