@@ -30,7 +30,7 @@ The feed contains the current week and the next two. Weeks without a published s
 On a Debian/Ubuntu server, as root:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/qfunky/schedule-parser/main/setup.sh | bash
+curl -sSL https://raw.githubusercontent.com/funkovx/schedule-parser/main/setup.sh | bash
 ```
 
 The installer creates the service user, installs the systemd unit and the nginx config, and requests a certificate. See `deploy/` for the individual pieces.
