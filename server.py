@@ -5,6 +5,7 @@ import os
 import re
 import threading
 import time
+from urllib.parse import quote_from_bytes
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -19,6 +20,16 @@ log = logging.getLogger("schedule-parser")
 # Документация FastAPI (/docs, /openapi.json) наружу не нужна
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
+
+@app.middleware("http")
+async def raw_query_from_nginx(request, call_next):
+    # uvicorn отклоняет адреса с кириллицей без %-кодирования (?group=К0609-24),
+    # поэтому nginx передаёт строку запроса в заголовке X-Query, а здесь она кодируется
+    raw = next((v for k, v in request.scope["headers"] if k == b"x-query"), None)
+    if raw is not None:
+        request.scope["query_string"] = quote_from_bytes(raw, safe="=&%+/").encode()
+    return await call_next(request)
+
 TZ = ZoneInfo("Europe/Moscow")
 DEFAULT_GROUP = os.getenv("TARGET_GROUP", "К0609-24")
 # Текущая неделя + столько недель вперёд. Если расписания ещё нет, недели просто пустые
@@ -31,7 +42,9 @@ STALE_MAX_AGE = int(os.getenv("STALE_MAX_AGE", str(7 * 24 * 3600)))
 ALARM_MINUTES = int(os.getenv("ALARM_MINUTES", "10"))
 STATE_DIR = Path(os.getenv("STATE_DIRECTORY", "/var/lib/schedule-parser"))
 
-GROUP_RE = re.compile(r"^[А-ЯЁA-Z]{1,3}\d{3,4}-\d{2}(/\d{1,2})?$")
+GROUP_RE = re.compile(r"^[А-ЯЁ]{1,3}\d{3,4}-\d{2}(/\d{1,2})?$")
+# Латинские буквы, похожие на кириллические: K0609-24 и К0609-24 — одна группа
+LATIN_TO_CYRILLIC = str.maketrans("ABCEHKMOPTXY", "АВСЕНКМОРТХУ")
 # ПА / ППА / ППА1 / ПА-2 / (ПА) как отдельное слово, а также «промежуточная аттестация»
 PA_RE = re.compile(
     r"(?<![А-Яа-яЁёA-Za-z])П?ПА(?:\s*-?\s*\d+)?(?![А-Яа-яЁёA-Za-z])|промежуточн\w*\s+аттестац",
@@ -209,7 +222,7 @@ def get_schedule(
     skip_pa: bool = Query(True),
     alarm: int = Query(ALARM_MINUTES, ge=0, le=1440),
 ):
-    group = group.strip().upper()
+    group = group.strip().upper().translate(LATIN_TO_CYRILLIC)
     if not GROUP_RE.match(group):
         raise HTTPException(status_code=400, detail="Неверное название группы")
 
